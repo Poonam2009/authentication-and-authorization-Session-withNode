@@ -4,16 +4,17 @@ import { usersTable} from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { createHmac, randomBytes } from 'node:crypto';
 import jwt from 'jsonwebtoken';
+import { ensureAuthenticated } from '../middlewares/auth.middleware.js';
 
 
 const router = express.Router()
 
-router.patch('/', async (req,res) => {
+router.patch('/', ensureAuthenticated, async (req,res) => {
     const user = req.user;
 
-    if(!user) {
-        return res.status(400).json({error: `You are not logged In`});
-    }
+    // if(!user) {
+    //     return res.status(400).json({error: `You are not logged In`});
+    // }
 
     const {name} = req.body;
 
@@ -23,12 +24,18 @@ router.patch('/', async (req,res) => {
 
 })
 
-router.get('/', async (req, res) => {
+router.get('/', ensureAuthenticated, async (req, res) => {
     const user = req.user;
-    if(!user) {
-        return res.status(400).json({error: `You are not logged In`});
-    }
-    return res.json(user)
+    // if(!user) {
+    //     return res.status(400).json({error: `You are not logged In`});
+    // }
+    const [updatedDetails] = await db.select({
+        id: usersTable.id,
+        name: usersTable.name,
+        role: usersTable.role,
+        email: usersTable.email
+    }).from(usersTable).where(eq(usersTable.id, user.id))
+    return res.json(updatedDetails)
     
 })
 
@@ -73,6 +80,7 @@ router.post('/login', async (req, res) => {
                 id: usersTable.id,
                 email: usersTable.email,
                 name: usersTable.name,
+                role: usersTable.role,
                 salt: usersTable.salt,
                 password: usersTable.password
             })
@@ -89,7 +97,7 @@ router.post('/login', async (req, res) => {
     if(existingHashedPassword !== newHashed) {
         return res.status(400).json({error: `Incorrect password`})
     }
-    
+
     // generate session for user
     // const [session] = await db.insert(userSession).values({
     //     userId:existingUser.id
@@ -102,14 +110,11 @@ router.post('/login', async (req, res) => {
     const payload = {
         id: existingUser.id,
         email: existingUser.email,
-        name: existingUser.name
+        name: existingUser.name,
+        role: existingUser.role,
     }
 
-    const token = jwt.sign(payload, process.env.JWT_SECRET)
-
-    console.log(payload)
-
-
+    const token = jwt.sign(payload, process.env.JWT_SECRET, {expiresIn: '1h'})
     return res.json({status: `Success`, token})
     
 })
